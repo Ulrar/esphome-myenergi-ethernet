@@ -44,89 +44,89 @@ SENSOR_NAME_SUFFIXES = {
 }
 
 
-def _sensor_schema(name_suffix, *, candidate=False, **kwargs):
-    """Add a validation-time name while keeping per-sensor names configurable."""
-    schema = cv.All(
-        cv.Schema(
-            {cv.Optional(CONF_NAME, default=name_suffix): cv.string},
-            extra=cv.ALLOW_EXTRA,
-        ),
-        sensor.sensor_schema(**kwargs),
+def _assign_sensor_names(config):
+    """Assign prefixed names before ESPHome validates sensor entities."""
+    if not isinstance(config, dict) or CONF_SERIAL not in config:
+        return config
+
+    device_name = config.get(CONF_NAME) or f"Zappi {config[CONF_SERIAL]}"
+    config = dict(config)
+    for key, suffix in SENSOR_NAME_SUFFIXES.items():
+        sensor_config = config.get(key)
+        if isinstance(sensor_config, dict) and CONF_NAME not in sensor_config:
+            sensor_config = dict(sensor_config)
+            sensor_config[CONF_NAME] = f"{device_name} {suffix}"
+            config[key] = sensor_config
+    return config
+
+
+def _candidate_sensor_schema(**kwargs):
+    """Keep unverified candidate readings disabled in Home Assistant by default."""
+    schema = sensor.sensor_schema(**kwargs)
+    return cv.All(
+        schema,
+        lambda config: {**config, CONF_DISABLED_BY_DEFAULT: True},
     )
-    if candidate:
-        return cv.All(
-            schema,
-            lambda config: {**config, CONF_DISABLED_BY_DEFAULT: True},
-        )
-    return schema
 
 
-device_schema = cv.Schema(
-    {
-        cv.Required(CONF_SERIAL): cv.int_range(min=1, max=0xFFFFFFFF),
-        cv.Optional(CONF_NAME): cv.string,
-        cv.Optional(CONF_CHARGING_POWER): _sensor_schema(
-            SENSOR_NAME_SUFFIXES[CONF_CHARGING_POWER],
-            unit_of_measurement="W",
-            icon="mdi:flash",
-            accuracy_decimals=0,
-            device_class=DEVICE_CLASS_POWER,
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_SESSION_ENERGY): _sensor_schema(
-            SENSOR_NAME_SUFFIXES[CONF_SESSION_ENERGY],
-            unit_of_measurement="kWh",
-            icon="mdi:lightning-bolt",
-            accuracy_decimals=2,
-            device_class=DEVICE_CLASS_ENERGY,
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_PWM): _sensor_schema(
-            SENSOR_NAME_SUFFIXES[CONF_PWM],
-            unit_of_measurement="%",
-            icon="mdi:gauge",
-            accuracy_decimals=2,
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
-        cv.Optional(CONF_VOLTAGE_1): _sensor_schema(
-            SENSOR_NAME_SUFFIXES[CONF_VOLTAGE_1],
-            candidate=True,
-            unit_of_measurement="V",
-            icon="mdi:current-ac",
-            accuracy_decimals=1,
-            device_class=DEVICE_CLASS_VOLTAGE,
-            state_class=STATE_CLASS_MEASUREMENT,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
-        cv.Optional(CONF_VOLTAGE_2): _sensor_schema(
-            SENSOR_NAME_SUFFIXES[CONF_VOLTAGE_2],
-            candidate=True,
-            unit_of_measurement="V",
-            icon="mdi:current-ac",
-            accuracy_decimals=1,
-            device_class=DEVICE_CLASS_VOLTAGE,
-            state_class=STATE_CLASS_MEASUREMENT,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
-        cv.Optional(CONF_VOLTAGE_3): _sensor_schema(
-            SENSOR_NAME_SUFFIXES[CONF_VOLTAGE_3],
-            candidate=True,
-            unit_of_measurement="V",
-            icon="mdi:current-ac",
-            accuracy_decimals=1,
-            device_class=DEVICE_CLASS_VOLTAGE,
-            state_class=STATE_CLASS_MEASUREMENT,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
-        cv.Optional(CONF_GRID_FREQUENCY): _sensor_schema(
-            SENSOR_NAME_SUFFIXES[CONF_GRID_FREQUENCY],
-            candidate=True,
-            unit_of_measurement="Hz",
-            icon="mdi:sine-wave",
-            accuracy_decimals=2,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
-    }
+device_schema = cv.All(
+    _assign_sensor_names,
+    cv.Schema(
+        {
+            cv.Required(CONF_SERIAL): cv.int_range(min=1, max=0xFFFFFFFF),
+            cv.Optional(CONF_NAME): cv.string,
+            cv.Optional(CONF_CHARGING_POWER): sensor.sensor_schema(
+                unit_of_measurement="W",
+                icon="mdi:flash",
+                accuracy_decimals=0,
+                device_class=DEVICE_CLASS_POWER,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_SESSION_ENERGY): sensor.sensor_schema(
+                unit_of_measurement="kWh",
+                icon="mdi:lightning-bolt",
+                accuracy_decimals=2,
+                device_class=DEVICE_CLASS_ENERGY,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_PWM): sensor.sensor_schema(
+                unit_of_measurement="%",
+                icon="mdi:gauge",
+                accuracy_decimals=2,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_VOLTAGE_1): _candidate_sensor_schema(
+                unit_of_measurement="V",
+                icon="mdi:current-ac",
+                accuracy_decimals=1,
+                device_class=DEVICE_CLASS_VOLTAGE,
+                state_class=STATE_CLASS_MEASUREMENT,
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            cv.Optional(CONF_VOLTAGE_2): _candidate_sensor_schema(
+                unit_of_measurement="V",
+                icon="mdi:current-ac",
+                accuracy_decimals=1,
+                device_class=DEVICE_CLASS_VOLTAGE,
+                state_class=STATE_CLASS_MEASUREMENT,
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            cv.Optional(CONF_VOLTAGE_3): _candidate_sensor_schema(
+                unit_of_measurement="V",
+                icon="mdi:current-ac",
+                accuracy_decimals=1,
+                device_class=DEVICE_CLASS_VOLTAGE,
+                state_class=STATE_CLASS_MEASUREMENT,
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            cv.Optional(CONF_GRID_FREQUENCY): _candidate_sensor_schema(
+                unit_of_measurement="Hz",
+                icon="mdi:sine-wave",
+                accuracy_decimals=2,
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+        }
+    )
 )
 
 CONFIG_SCHEMA = cv.Schema(
@@ -158,7 +158,6 @@ async def to_code(config):
 
     for device in config[CONF_DEVICES]:
         serial = device[CONF_SERIAL]
-        device_name = device.get(CONF_NAME) or f"Zappi {serial}"
         for key, setter in (
             (CONF_CHARGING_POWER, "set_charging_power_sensor"),
             (CONF_SESSION_ENERGY, "set_session_energy_sensor"),
@@ -169,10 +168,5 @@ async def to_code(config):
             (CONF_GRID_FREQUENCY, "set_grid_frequency_candidate_sensor"),
         ):
             if key in device:
-                sensor_config = dict(device[key])
-                if sensor_config[CONF_NAME] == SENSOR_NAME_SUFFIXES[key]:
-                    sensor_config[CONF_NAME] = (
-                        f"{device_name} {sensor_config[CONF_NAME]}"
-                    )
-                entity = await sensor.new_sensor(sensor_config)
+                entity = await sensor.new_sensor(device[key])
                 cg.add(getattr(var, setter)(serial, entity))
