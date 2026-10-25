@@ -1,0 +1,4 @@
+# Local network captures are installation-specific and may contain identifiers.
+*.pcap
+*.pcapng
+captures/
