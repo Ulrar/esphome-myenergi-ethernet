@@ -36,20 +36,16 @@ myenergi_ethernet:
     name: Grid power
   devices:
     - serial: YOUR_ZAPPI_SERIAL # Replace with the decimal serial from the Zappi telemetry.
-      charging_power:
-        name: Zappi charging power
-      session_energy:
-        name: Zappi session energy
-      pwm:
-        name: Zappi PWM
+      name: Garage Zappi # Optional; defaults to "Zappi <serial>".
+      charging_power: {}
+      session_energy: {}
+      pwm: {}
       # Candidate entities are optional and disabled by default.
-      voltage_candidate_1:
-        name: Zappi voltage candidate 1
-      grid_frequency_candidate:
-        name: Zappi frequency candidate
+      voltage_candidate_1: {}
+      grid_frequency_candidate: {}
 ```
 
-Replace the serial placeholder with the charger's decimal serial number; do not copy the placeholder literally. Add another entry under `devices:` for each charger.
+Replace the serial placeholder with the charger's decimal serial number; do not copy the placeholder literally. Add another entry under `devices:` for each charger. The device `name` is used as a prefix, followed by each measurement name. Omit it to use `Zappi <serial>`. Each sensor can still set its own `name` to override the generated one.
 
 ## Switch setup
 

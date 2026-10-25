@@ -4,6 +4,7 @@ from esphome.components import ethernet, sensor
 from esphome.const import (
     CONF_DISABLED_BY_DEFAULT,
     CONF_ID,
+    CONF_NAME,
     DEVICE_CLASS_ENERGY,
     DEVICE_CLASS_POWER,
     DEVICE_CLASS_VOLTAGE,
@@ -32,6 +33,16 @@ CONF_VOLTAGE_2 = "voltage_candidate_2"
 CONF_VOLTAGE_3 = "voltage_candidate_3"
 CONF_GRID_FREQUENCY = "grid_frequency_candidate"
 
+SENSOR_NAME_SUFFIXES = {
+    CONF_CHARGING_POWER: "charging power",
+    CONF_SESSION_ENERGY: "session energy",
+    CONF_PWM: "PWM",
+    CONF_VOLTAGE_1: "voltage candidate 1",
+    CONF_VOLTAGE_2: "voltage candidate 2",
+    CONF_VOLTAGE_3: "voltage candidate 3",
+    CONF_GRID_FREQUENCY: "grid frequency candidate",
+}
+
 
 def _candidate_sensor_schema(**kwargs):
     """Keep unverified candidate readings disabled in Home Assistant by default."""
@@ -45,6 +56,7 @@ def _candidate_sensor_schema(**kwargs):
 device_schema = cv.Schema(
     {
         cv.Required(CONF_SERIAL): cv.int_range(min=1, max=0xFFFFFFFF),
+        cv.Optional(CONF_NAME): cv.string,
         cv.Optional(CONF_CHARGING_POWER): sensor.sensor_schema(
             unit_of_measurement="W",
             icon="mdi:flash",
@@ -127,6 +139,7 @@ async def to_code(config):
 
     for device in config[CONF_DEVICES]:
         serial = device[CONF_SERIAL]
+        device_name = device.get(CONF_NAME) or f"Zappi {serial}"
         for key, setter in (
             (CONF_CHARGING_POWER, "set_charging_power_sensor"),
             (CONF_SESSION_ENERGY, "set_session_energy_sensor"),
@@ -137,5 +150,9 @@ async def to_code(config):
             (CONF_GRID_FREQUENCY, "set_grid_frequency_candidate_sensor"),
         ):
             if key in device:
-                entity = await sensor.new_sensor(device[key])
+                sensor_config = dict(device[key])
+                sensor_config.setdefault(
+                    CONF_NAME, f"{device_name} {SENSOR_NAME_SUFFIXES[key]}"
+                )
+                entity = await sensor.new_sensor(sensor_config)
                 cg.add(getattr(var, setter)(serial, entity))

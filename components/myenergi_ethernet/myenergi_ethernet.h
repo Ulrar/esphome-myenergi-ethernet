@@ -41,7 +41,8 @@ class MyEnergiEthernetComponent : public Component {
   float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
 
  protected:
-  static esp_err_t input_callback(void *buffer, uint32_t length, void *context);
+  static esp_err_t input_callback(esp_eth_handle_t handle, uint8_t *buffer, uint32_t length,
+                                  void *context);
   esp_err_t handle_frame(const uint8_t *frame, size_t length);
   ZappiSensors &get_or_create_device_(uint32_t serial);
   ZappiSensors *find_device_(uint32_t serial);

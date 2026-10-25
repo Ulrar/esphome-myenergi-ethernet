@@ -32,7 +32,7 @@ void MyEnergiEthernetComponent::setup() {
   }
 
   this->eth_handle_ = this->ethernet_->get_eth_handle();
-  this->netif_ = this->ethernet_->get_netif();
+  this->netif_ = this->ethernet_->get_esp_netif();
   if (this->eth_handle_ == nullptr || this->netif_ == nullptr) {
     ESP_LOGE(TAG, "Ethernet driver is not ready; check ethernet_id and setup order");
     this->mark_failed();
@@ -59,13 +59,14 @@ void MyEnergiEthernetComponent::setup() {
   ESP_LOGI(TAG, "Listening for MyEnergi 0x88b5 Ethernet frames");
 }
 
-esp_err_t MyEnergiEthernetComponent::input_callback(void *buffer, uint32_t length, void *context) {
+esp_err_t MyEnergiEthernetComponent::input_callback(esp_eth_handle_t, uint8_t *buffer, uint32_t length,
+                                                    void *context) {
   auto *component = static_cast<MyEnergiEthernetComponent *>(context);
   if (component == nullptr || buffer == nullptr) {
     return ESP_ERR_INVALID_ARG;
   }
 
-  component->handle_frame(static_cast<const uint8_t *>(buffer), length);
+  component->handle_frame(buffer, length);
   // Keep the normal ESPHome Ethernet/IP path intact for frames that belong to
   // this interface. MyEnergi frames are inspected above and ignored by IP.
   return esp_netif_receive(component->netif_, buffer, length, nullptr);
