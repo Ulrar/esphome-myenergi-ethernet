@@ -2,6 +2,7 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import ethernet, sensor
 from esphome.const import (
+    CONF_DISABLED_BY_DEFAULT,
     CONF_ID,
     DEVICE_CLASS_ENERGY,
     DEVICE_CLASS_POWER,
@@ -31,6 +32,16 @@ CONF_VOLTAGE_2 = "voltage_candidate_2"
 CONF_VOLTAGE_3 = "voltage_candidate_3"
 CONF_GRID_FREQUENCY = "grid_frequency_candidate"
 
+
+def _candidate_sensor_schema(**kwargs):
+    """Keep unverified candidate readings disabled in Home Assistant by default."""
+    schema = sensor.sensor_schema(**kwargs)
+    return cv.All(
+        schema,
+        lambda config: {**config, CONF_DISABLED_BY_DEFAULT: True},
+    )
+
+
 device_schema = cv.Schema(
     {
         cv.Required(CONF_SERIAL): cv.int_range(min=1, max=0xFFFFFFFF),
@@ -54,39 +65,35 @@ device_schema = cv.Schema(
             accuracy_decimals=2,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
-        cv.Optional(CONF_VOLTAGE_1): sensor.sensor_schema(
+        cv.Optional(CONF_VOLTAGE_1): _candidate_sensor_schema(
             unit_of_measurement="V",
             icon="mdi:current-ac",
             accuracy_decimals=1,
             device_class=DEVICE_CLASS_VOLTAGE,
             state_class=STATE_CLASS_MEASUREMENT,
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-            entity_registry_enabled_default=False,
         ),
-        cv.Optional(CONF_VOLTAGE_2): sensor.sensor_schema(
+        cv.Optional(CONF_VOLTAGE_2): _candidate_sensor_schema(
             unit_of_measurement="V",
             icon="mdi:current-ac",
             accuracy_decimals=1,
             device_class=DEVICE_CLASS_VOLTAGE,
             state_class=STATE_CLASS_MEASUREMENT,
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-            entity_registry_enabled_default=False,
         ),
-        cv.Optional(CONF_VOLTAGE_3): sensor.sensor_schema(
+        cv.Optional(CONF_VOLTAGE_3): _candidate_sensor_schema(
             unit_of_measurement="V",
             icon="mdi:current-ac",
             accuracy_decimals=1,
             device_class=DEVICE_CLASS_VOLTAGE,
             state_class=STATE_CLASS_MEASUREMENT,
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-            entity_registry_enabled_default=False,
         ),
-        cv.Optional(CONF_GRID_FREQUENCY): sensor.sensor_schema(
+        cv.Optional(CONF_GRID_FREQUENCY): _candidate_sensor_schema(
             unit_of_measurement="Hz",
             icon="mdi:sine-wave",
             accuracy_decimals=2,
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-            entity_registry_enabled_default=False,
         ),
     }
 )
