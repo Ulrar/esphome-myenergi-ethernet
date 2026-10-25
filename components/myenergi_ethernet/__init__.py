@@ -32,6 +32,11 @@ CONF_VOLTAGE_1 = "voltage_candidate_1"
 CONF_VOLTAGE_2 = "voltage_candidate_2"
 CONF_VOLTAGE_3 = "voltage_candidate_3"
 CONF_GRID_FREQUENCY = "grid_frequency_candidate"
+CONF_MODE_CODE = "mode_code_candidate"
+CONF_CT_CHANNELS = "ct_channels"
+CONF_CHANNEL = "channel"
+CONF_CT_POWER = "power_candidate"
+CONF_CT_CURRENT = "current_candidate"
 
 SENSOR_NAME_SUFFIXES = {
     CONF_CHARGING_POWER: "charging power",
@@ -41,6 +46,7 @@ SENSOR_NAME_SUFFIXES = {
     CONF_VOLTAGE_2: "voltage candidate 2",
     CONF_VOLTAGE_3: "voltage candidate 3",
     CONF_GRID_FREQUENCY: "grid frequency candidate",
+    CONF_MODE_CODE: "mode code candidate",
 }
 
 
@@ -57,6 +63,22 @@ def _assign_sensor_names(config):
             sensor_config = dict(sensor_config)
             sensor_config[CONF_NAME] = f"{device_name} {suffix}"
             config[key] = sensor_config
+    ct_channels = []
+    for ct_config in config.get(CONF_CT_CHANNELS, []):
+        ct_config = dict(ct_config)
+        channel = ct_config[CONF_CHANNEL]
+        for key, suffix in (
+            (CONF_CT_POWER, f"CT channel {channel} power candidate"),
+            (CONF_CT_CURRENT, f"CT channel {channel} current candidate"),
+        ):
+            sensor_config = ct_config.get(key)
+            if isinstance(sensor_config, dict) and CONF_NAME not in sensor_config:
+                sensor_config = dict(sensor_config)
+                sensor_config[CONF_NAME] = f"{device_name} {suffix}"
+                ct_config[key] = sensor_config
+        ct_channels.append(ct_config)
+    if CONF_CT_CHANNELS in config:
+        config[CONF_CT_CHANNELS] = ct_channels
     return config
 
 
@@ -125,6 +147,32 @@ device_schema = cv.All(
                 accuracy_decimals=2,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
             ),
+            cv.Optional(CONF_MODE_CODE): _candidate_sensor_schema(
+                icon="mdi:ev-station",
+                accuracy_decimals=0,
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            cv.Optional(CONF_CT_CHANNELS): cv.ensure_list(
+                cv.Schema(
+                    {
+                        cv.Required(CONF_CHANNEL): cv.int_range(min=1, max=15),
+                        cv.Optional(CONF_CT_POWER): _candidate_sensor_schema(
+                            unit_of_measurement="W",
+                            icon="mdi:flash",
+                            accuracy_decimals=0,
+                            device_class=DEVICE_CLASS_POWER,
+                            state_class=STATE_CLASS_MEASUREMENT,
+                            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                        ),
+                        cv.Optional(CONF_CT_CURRENT): _candidate_sensor_schema(
+                            unit_of_measurement="A",
+                            icon="mdi:current-ac",
+                            accuracy_decimals=2,
+                            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+                        ),
+                    }
+                )
+            ),
         }
     )
 )
@@ -166,7 +214,18 @@ async def to_code(config):
             (CONF_VOLTAGE_2, "set_voltage_candidate_2_sensor"),
             (CONF_VOLTAGE_3, "set_voltage_candidate_3_sensor"),
             (CONF_GRID_FREQUENCY, "set_grid_frequency_candidate_sensor"),
+            (CONF_MODE_CODE, "set_mode_code_candidate_sensor"),
         ):
             if key in device:
                 entity = await sensor.new_sensor(device[key])
                 cg.add(getattr(var, setter)(serial, entity))
+
+        for ct_channel in device.get(CONF_CT_CHANNELS, []):
+            channel = ct_channel[CONF_CHANNEL]
+            for key, setter in (
+                (CONF_CT_POWER, "set_ct_channel_power_sensor"),
+                (CONF_CT_CURRENT, "set_ct_channel_current_sensor"),
+            ):
+                if key in ct_channel:
+                    entity = await sensor.new_sensor(ct_channel[key])
+                    cg.add(getattr(var, setter)(serial, channel, entity))

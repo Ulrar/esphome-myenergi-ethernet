@@ -22,6 +22,10 @@ uint32_t read_u32_le(const uint8_t *data) {
 
 int32_t read_i32_le(const uint8_t *data) { return static_cast<int32_t>(read_u32_le(data)); }
 
+int16_t read_i16_le(const uint8_t *data) {
+  return static_cast<int16_t>(static_cast<uint16_t>(data[0]) | (static_cast<uint16_t>(data[1]) << 8));
+}
+
 }  // namespace
 
 void MyEnergiEthernetComponent::setup() {
@@ -92,64 +96,120 @@ esp_err_t MyEnergiEthernetComponent::handle_frame(const uint8_t *frame, size_t l
 
   const uint8_t *payload = frame + ethernet_header_length;
   const size_t payload_length = length - ethernet_header_length;
-  if (payload_length < 28 || payload[0] != 0xCB || payload[1] != 0xDA || payload[2] != 0xE9 ||
+  if (payload_length < 24 || payload[0] != 0xCB || payload[1] != 0xDA || payload[2] != 0xE9 ||
       payload[3] != 0xF8 || payload[20] != 0x01 || payload[21] != 0x00 || payload[22] != 0x00 ||
       payload[23] != 0x00) {
     return ESP_OK;
   }
 
-  const uint8_t record_0 = payload[24];
-  const uint8_t record_1 = payload[25];
-  const uint8_t marker_0 = payload[26];
-  const uint8_t marker_1 = payload[27];
-
-  // Grid power: record 01 36, signed little-endian watts at payload[30:34].
-  if (record_0 == 0x01 && record_1 == 0x36 && payload_length >= 34 && this->grid_power_ != nullptr) {
-    this->grid_power_->publish_state(static_cast<float>(read_i32_le(payload + 30)));
-    return ESP_OK;
-  }
-
-  if (marker_0 == 0x10 && marker_1 == 0x35 && payload_length >= 54) {
-    const uint32_t serial = read_u32_le(payload + 30);
-    ZappiSensors *device = this->find_device_(serial);
-    if (device == nullptr) {
-      return ESP_OK;
+  size_t offset = 24;
+  while (offset < payload_length) {
+    const uint8_t record_length = payload[offset];
+    if (record_length == 0) {
+      break;  // Ethernet padding
     }
-
-    if (record_0 == 0x20 && record_1 == 0x1D && device->charging_power != nullptr) {
-      device->charging_power->publish_state(static_cast<float>(read_u16_le(payload + 38)));
-    } else if (record_0 == 0x1F && record_1 == 0x1D && device->session_energy != nullptr) {
-      device->session_energy->publish_state(static_cast<float>(read_u16_le(payload + 44)) / 100.0f);
-    } else if ((record_0 == 0x32 || record_0 == 0x35) && record_1 == 0x1D && device->pwm != nullptr) {
-      device->pwm->publish_state(static_cast<float>(read_u16_le(payload + 52)) / 100.0f);
+    if (record_length < 6 || offset + record_length > payload_length) {
+      break;
     }
-    return ESP_OK;
-  }
-
-  // Voltage/frequency values are useful candidates, but their exact channel
-  // meanings are still being checked against the cloud/HA readings.
-  if (record_0 == 0x3E && record_1 == 0x1D && marker_0 == 0x5A && marker_1 == 0x5A &&
-      payload_length >= 86) {
-    const uint32_t serial = read_u32_le(payload + 82);
-    ZappiSensors *device = this->find_device_(serial);
-    if (device == nullptr) {
-      return ESP_OK;
-    }
-    if (device->voltage_candidate_1 != nullptr) {
-      device->voltage_candidate_1->publish_state(static_cast<float>(read_u16_le(payload + 60)) / 10.0f);
-    }
-    if (device->voltage_candidate_2 != nullptr) {
-      device->voltage_candidate_2->publish_state(static_cast<float>(read_u16_le(payload + 62)) / 10.0f);
-    }
-    if (device->voltage_candidate_3 != nullptr) {
-      device->voltage_candidate_3->publish_state(static_cast<float>(read_u16_le(payload + 64)) / 10.0f);
-    }
-    if (device->grid_frequency_candidate != nullptr) {
-      device->grid_frequency_candidate->publish_state(static_cast<float>(read_u16_le(payload + 66)) / 100.0f);
-    }
+    this->handle_record_(payload + offset, record_length);
+    offset += record_length;
   }
 
   return ESP_OK;
+}
+
+void MyEnergiEthernetComponent::handle_record_(const uint8_t *record, size_t length) {
+  if (length < 6) {
+    return;
+  }
+
+  const uint16_t record_type = read_u16_le(record + 2);
+  if (record_type == 0x3601) {
+    // The record starts at payload offset 24; its signed grid-power value is
+    // the first 32-bit field after the six-byte record header.
+    if (length >= 10 && this->grid_power_ != nullptr) {
+      this->grid_power_->publish_state(static_cast<float>(read_i32_le(record + 6)));
+    }
+    return;
+  }
+
+  if (record_type == 0x5A5A) {
+    // Voltage/frequency channels remain candidates until their phase mapping
+    // has been confirmed for this firmware family.
+    if (length < 62) {
+      return;
+    }
+    const uint32_t serial = read_u32_le(record + 58);
+    ZappiSensors *device = this->find_device_(serial);
+    if (device == nullptr) {
+      return;
+    }
+    if (device->voltage_candidate_1 != nullptr) {
+      device->voltage_candidate_1->publish_state(static_cast<float>(read_u16_le(record + 36)) / 10.0f);
+    }
+    if (device->voltage_candidate_2 != nullptr) {
+      device->voltage_candidate_2->publish_state(static_cast<float>(read_u16_le(record + 38)) / 10.0f);
+    }
+    if (device->voltage_candidate_3 != nullptr) {
+      device->voltage_candidate_3->publish_state(static_cast<float>(read_u16_le(record + 40)) / 10.0f);
+    }
+    if (device->grid_frequency_candidate != nullptr) {
+      device->grid_frequency_candidate->publish_state(static_cast<float>(read_u16_le(record + 42)) / 100.0f);
+    }
+    return;
+  }
+
+  if (record_type != 0x3510 || length < 24 || ((record[4] >> 3) & 0x07) != 2) {
+    return;
+  }
+
+  const uint32_t serial = read_u32_le(record + 6);
+  ZappiSensors *device = this->find_device_(serial);
+  if (device == nullptr) {
+    return;
+  }
+
+  // Length distinguishes these record variants within the shared 0x3510 type.
+  if (length == 0x20 && device->charging_power != nullptr) {
+    device->charging_power->publish_state(static_cast<float>(read_u16_le(record + 14)));
+  } else if (length == 0x1F && device->session_energy != nullptr) {
+    device->session_energy->publish_state(static_cast<float>(read_u16_le(record + 20)) / 100.0f);
+  } else if ((length == 0x32 || length == 0x35) && device->pwm != nullptr) {
+    device->pwm->publish_state(static_cast<float>(read_u16_le(record + 28)) / 100.0f);
+  }
+
+  if (device->mode_code_candidate != nullptr) {
+    device->mode_code_candidate->publish_state(static_cast<float>(record[23] & 0x03));
+  }
+
+  // These short CT subrecords carry a channel number plus two signed values.
+  // Value A correlates with watts. Value B on the charging-load channel
+  // correlates with current in hundredths of an amp; retain candidate naming
+  // because the scale and role have not been checked across other CT roles.
+  size_t offset = 24;
+  while (offset < length) {
+    const uint8_t subrecord_length = record[offset] & 0x0F;
+    if (subrecord_length == 0 || offset + subrecord_length > length) {
+      break;
+    }
+    if (subrecord_length == 8 && (record[offset] >> 4) == 0) {
+      const uint8_t channel = record[offset + 1] >> 4;
+      const int16_t value_a = read_i16_le(record + offset + 4);
+      const int16_t value_b = read_i16_le(record + offset + 6);
+      for (auto &ct_channel : device->ct_channels) {
+        if (ct_channel.channel != channel) {
+          continue;
+        }
+        if (ct_channel.power != nullptr) {
+          ct_channel.power->publish_state(static_cast<float>(value_a));
+        }
+        if (ct_channel.current != nullptr) {
+          ct_channel.current->publish_state(static_cast<float>(value_b) / 100.0f);
+        }
+      }
+    }
+    offset += subrecord_length;
+  }
 }
 
 ZappiSensors &MyEnergiEthernetComponent::get_or_create_device_(uint32_t serial) {
@@ -198,6 +258,34 @@ void MyEnergiEthernetComponent::set_voltage_candidate_3_sensor(uint32_t serial, 
 
 void MyEnergiEthernetComponent::set_grid_frequency_candidate_sensor(uint32_t serial, sensor::Sensor *sensor) {
   this->get_or_create_device_(serial).grid_frequency_candidate = sensor;
+}
+
+void MyEnergiEthernetComponent::set_mode_code_candidate_sensor(uint32_t serial, sensor::Sensor *sensor) {
+  this->get_or_create_device_(serial).mode_code_candidate = sensor;
+}
+
+void MyEnergiEthernetComponent::set_ct_channel_power_sensor(uint32_t serial, uint8_t channel,
+                                                             sensor::Sensor *sensor) {
+  auto &device = this->get_or_create_device_(serial);
+  for (auto &ct_channel : device.ct_channels) {
+    if (ct_channel.channel == channel) {
+      ct_channel.power = sensor;
+      return;
+    }
+  }
+  device.ct_channels.push_back(CtChannelSensors{channel, sensor, nullptr});
+}
+
+void MyEnergiEthernetComponent::set_ct_channel_current_sensor(uint32_t serial, uint8_t channel,
+                                                              sensor::Sensor *sensor) {
+  auto &device = this->get_or_create_device_(serial);
+  for (auto &ct_channel : device.ct_channels) {
+    if (ct_channel.channel == channel) {
+      ct_channel.current = sensor;
+      return;
+    }
+  }
+  device.ct_channels.push_back(CtChannelSensors{channel, nullptr, sensor});
 }
 
 }  // namespace myenergi_ethernet

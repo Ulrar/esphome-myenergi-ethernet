@@ -4,17 +4,19 @@ An early ESPHome external component for passively reading telemetry broadcast by
 
 ## Current field mappings
 
-These mappings are based on packet captures correlated with Home Assistant readings. They describe the observed record variants, not a complete protocol specification.
+These mappings are based on packet captures correlated with Home Assistant readings. The `0x88b5` payload has a 24-byte envelope followed by length-prefixed records. This describes the observed record variants, not a complete protocol specification.
 
 | Record | Field | Decode |
 | --- | --- | --- |
-| `01 36` | Grid power | Signed little-endian 32-bit watts at payload offsets 30–33. |
-| `10 35` with subrecord `20 1d` | Zappi charging power | Little-endian 16-bit watts at offsets 38–39. The device serial is at offsets 30–33. |
-| `10 35` with subrecord `1f 1d` | Session energy | Little-endian 16-bit value at offsets 44–45, divided by 100 for kWh. |
-| `10 35` with subrecord `32 1d` or `35 1d` | PWM | Little-endian 16-bit value at offsets 52–53, divided by 100 for percent. |
-| `3e 1d 5a 5a` | Voltage and frequency candidates | Voltage-like values at offsets 60, 62, and 64 divided by 10; frequency-like value at offset 66 divided by 100. Device serial is at offsets 82–85. These entities are provisional and disabled by default. |
+| Type `0x3601` | Grid power | Signed little-endian 32-bit watts at record offsets 6–9 (frame payload offsets 30–33). |
+| Type `0x3510`, length `0x20` | Zappi charging power | Little-endian 16-bit watts at record offsets 14–15. The device serial is at record offsets 6–9. |
+| Type `0x3510`, length `0x1f` | Session energy | Little-endian 16-bit value at record offsets 20–21, divided by 100 for kWh. |
+| Type `0x3510`, length `0x32` or `0x35` | PWM | Little-endian 16-bit value at record offsets 28–29, divided by 100 for percent. |
+| Type `0x3510`, byte 23 | Mode code candidate | Low two bits; observed as `0` while stopped and `1` while Fast charging in the current capture. Eco and Eco+ values have not been checked on this firmware. |
+| Type `0x3510`, CT subrecords | CT power and current candidates | Eight-byte subrecords carry a channel number and two signed little-endian 16-bit values. Value A correlates with watts on the charger-load channel. Value B divided by 100 correlates with amps: on the charging-load channel, power divided by this current agrees with the independently reported line voltage. The scale has not been checked across all CT roles, so both entities remain optional candidates. |
+| Type `0x5a5a`, length `0x3e` | Voltage and frequency candidates | Voltage-like values at record offsets 36, 38, and 40 divided by 10; frequency-like value at offset 42 divided by 100. Device serial is at record offsets 58–61. These entities are provisional and disabled by default. |
 
-Offsets are relative to the frame payload after the Ethernet header. Charger serials in records are little-endian. The component matches per-charger records by serial rather than source MAC address.
+Record offsets are relative to each length-prefixed record; frame-payload offsets are relative to the bytes after the Ethernet header. Charger serials in records are little-endian. The component matches per-charger records by serial rather than source MAC address.
 
 ## Configuration
 
@@ -43,6 +45,11 @@ myenergi_ethernet:
       # Candidate entities are optional and disabled by default.
       voltage_candidate_1: {}
       grid_frequency_candidate: {}
+      mode_code_candidate: {}
+      ct_channels:
+        - channel: 1
+          power_candidate: {}
+          current_candidate: {}
 ```
 
 Replace the serial placeholder with the charger's decimal serial number; do not copy the placeholder literally. Add another entry under `devices:` for each charger. The device `name` is used as a prefix, followed by each measurement name. Omit it to use `Zappi <serial>`. Each sensor can still set its own `name` to override the generated one.
@@ -57,6 +64,6 @@ When the Ethernet port is a normal switch port on the LAN, ESPHome can use it fo
 
 This is a prototype and has not yet been compiled against a specific ESPHome release or ESP32 Ethernet board. It relies on ESP-IDF's Ethernet receive-path hook and promiscuous mode. Validate those APIs and frame delivery on the target before using the sensors for long-term logging.
 
-Grid power is exposed as a shared reading. The voltage channels are not fully identified. Other record families, checksums, version differences, and charger control commands are not decoded.
+Grid power is exposed as a shared reading. CT channel power/current and the mode code are optional diagnostic candidates; the charger-load CT power/current and Stop/Fast mode codes have been correlated on this firmware. The meaning of other CT channels, the `0x7979` record, voltage phase assignments, checksums, and version differences remain under investigation. Charger control commands are not decoded.
 
 Do not commit packet captures or installation-specific serial numbers, MAC addresses, IP addresses, or timestamps. Captures can contain those details even when the decoded fields do not.
