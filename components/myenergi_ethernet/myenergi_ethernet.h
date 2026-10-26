@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esphome/core/component.h"
+#include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/ethernet/ethernet_component.h"
 #include "esphome/components/sensor/sensor.h"
 
@@ -29,6 +30,7 @@ struct ZappiSensors {
   sensor::Sensor *voltage_candidate_3{nullptr};
   sensor::Sensor *grid_frequency_candidate{nullptr};
   sensor::Sensor *mode_code_candidate{nullptr};
+  binary_sensor::BinarySensor *plugged_in_candidate{nullptr};
   std::vector<CtChannelSensors> ct_channels;
 };
 
@@ -45,6 +47,7 @@ class MyEnergiEthernetComponent : public Component {
   void set_voltage_candidate_3_sensor(uint32_t serial, sensor::Sensor *sensor);
   void set_grid_frequency_candidate_sensor(uint32_t serial, sensor::Sensor *sensor);
   void set_mode_code_candidate_sensor(uint32_t serial, sensor::Sensor *sensor);
+  void set_plugged_in_candidate_binary_sensor(uint32_t serial, binary_sensor::BinarySensor *sensor);
   void set_ct_channel_power_sensor(uint32_t serial, uint8_t channel, sensor::Sensor *sensor);
   void set_ct_channel_current_sensor(uint32_t serial, uint8_t channel, sensor::Sensor *sensor);
 

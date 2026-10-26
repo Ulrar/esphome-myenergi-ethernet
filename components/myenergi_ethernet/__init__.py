@@ -1,11 +1,12 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import ethernet, sensor
+from esphome.components import binary_sensor, ethernet, sensor
 from esphome.const import (
     CONF_DISABLED_BY_DEFAULT,
     CONF_ID,
     CONF_NAME,
     DEVICE_CLASS_ENERGY,
+    DEVICE_CLASS_PLUG,
     DEVICE_CLASS_POWER,
     DEVICE_CLASS_VOLTAGE,
     ENTITY_CATEGORY_DIAGNOSTIC,
@@ -13,7 +14,7 @@ from esphome.const import (
 )
 
 DEPENDENCIES = ["ethernet"]
-AUTO_LOAD = ["sensor"]
+AUTO_LOAD = ["binary_sensor", "sensor"]
 CODEOWNERS = []
 
 myenergi_ns = cg.esphome_ns.namespace("myenergi_ethernet")
@@ -33,6 +34,7 @@ CONF_VOLTAGE_2 = "voltage_candidate_2"
 CONF_VOLTAGE_3 = "voltage_candidate_3"
 CONF_GRID_FREQUENCY = "grid_frequency_candidate"
 CONF_MODE_CODE = "mode_code_candidate"
+CONF_PLUGGED_IN = "plugged_in_candidate"
 CONF_CT_CHANNELS = "ct_channels"
 CONF_CHANNEL = "channel"
 CONF_CT_POWER = "power_candidate"
@@ -49,6 +51,10 @@ SENSOR_NAME_SUFFIXES = {
     CONF_MODE_CODE: "mode code candidate",
 }
 
+BINARY_SENSOR_NAME_SUFFIXES = {
+    CONF_PLUGGED_IN: "plugged in candidate",
+}
+
 
 def _assign_sensor_names(config):
     """Assign prefixed names before ESPHome validates sensor entities."""
@@ -63,6 +69,12 @@ def _assign_sensor_names(config):
             sensor_config = dict(sensor_config)
             sensor_config[CONF_NAME] = f"{device_name} {suffix}"
             config[key] = sensor_config
+    for key, suffix in BINARY_SENSOR_NAME_SUFFIXES.items():
+        binary_sensor_config = config.get(key)
+        if isinstance(binary_sensor_config, dict) and CONF_NAME not in binary_sensor_config:
+            binary_sensor_config = dict(binary_sensor_config)
+            binary_sensor_config[CONF_NAME] = f"{device_name} {suffix}"
+            config[key] = binary_sensor_config
     ct_channels = []
     for ct_config in config.get(CONF_CT_CHANNELS, []):
         ct_config = dict(ct_config)
@@ -85,6 +97,15 @@ def _assign_sensor_names(config):
 def _candidate_sensor_schema(**kwargs):
     """Keep unverified candidate readings disabled in Home Assistant by default."""
     schema = sensor.sensor_schema(**kwargs)
+    return cv.All(
+        schema,
+        lambda config: {**config, CONF_DISABLED_BY_DEFAULT: True},
+    )
+
+
+def _candidate_binary_sensor_schema(**kwargs):
+    """Keep unverified candidate states disabled in Home Assistant by default."""
+    schema = binary_sensor.binary_sensor_schema(**kwargs)
     return cv.All(
         schema,
         lambda config: {**config, CONF_DISABLED_BY_DEFAULT: True},
@@ -150,6 +171,11 @@ device_schema = cv.All(
             cv.Optional(CONF_MODE_CODE): _candidate_sensor_schema(
                 icon="mdi:ev-station",
                 accuracy_decimals=0,
+                entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            ),
+            cv.Optional(CONF_PLUGGED_IN): _candidate_binary_sensor_schema(
+                device_class=DEVICE_CLASS_PLUG,
+                icon="mdi:ev-plug-type2",
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
             ),
             cv.Optional(CONF_CT_CHANNELS): cv.ensure_list(
@@ -219,6 +245,10 @@ async def to_code(config):
             if key in device:
                 entity = await sensor.new_sensor(device[key])
                 cg.add(getattr(var, setter)(serial, entity))
+
+        if CONF_PLUGGED_IN in device:
+            entity = await binary_sensor.new_binary_sensor(device[CONF_PLUGGED_IN])
+            cg.add(var.set_plugged_in_candidate_binary_sensor(serial, entity))
 
         for ct_channel in device.get(CONF_CT_CHANNELS, []):
             channel = ct_channel[CONF_CHANNEL]

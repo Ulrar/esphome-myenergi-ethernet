@@ -13,6 +13,7 @@ These mappings are based on packet captures correlated with Home Assistant readi
 | Type `0x3510`, length `0x1f` | Session energy | Little-endian 16-bit value at record offsets 20–21, divided by 100 for kWh. |
 | Type `0x3510`, length `0x32` or `0x35` | PWM | Little-endian 16-bit value at record offsets 28–29, divided by 100 for percent. |
 | Type `0x3510`, byte 23 | Mode code candidate | Low two bits; observed as `0` while stopped and `1` while Fast charging in the current capture. Eco and Eco+ values have not been checked on this firmware. |
+| Type `0x3510`, byte 12 | Plugged-in candidate | Bit 0 was `0` before a plug-in, `1` while connected, and `0` after unplugging in one capture. This is a single-cycle correlation and remains optional and disabled by default. |
 | Type `0x3510`, CT subrecords | CT power and current candidates | Eight-byte subrecords carry a channel number and two signed little-endian 16-bit values. Value A correlates with watts on the charger-load channel. Value B divided by 100 correlates with amps: on the charging-load channel, power divided by this current agrees with the independently reported line voltage. The scale has not been checked across all CT roles, so both entities remain optional candidates. |
 | Type `0x5a5a`, length `0x3e` | Voltage and frequency candidates | Voltage-like values at record offsets 36, 38, and 40 divided by 10; frequency-like value at offset 42 divided by 100. Device serial is at record offsets 58–61. These entities are provisional and disabled by default. |
 
@@ -46,6 +47,7 @@ myenergi_ethernet:
       voltage_candidate_1: {}
       grid_frequency_candidate: {}
       mode_code_candidate: {}
+      plugged_in_candidate: {}
       ct_channels:
         - channel: 1
           power_candidate: {}
@@ -64,6 +66,6 @@ When the Ethernet port is a normal switch port on the LAN, ESPHome can use it fo
 
 This is a prototype and has not yet been compiled against a specific ESPHome release or ESP32 Ethernet board. It relies on ESP-IDF's Ethernet receive-path hook and promiscuous mode. Validate those APIs and frame delivery on the target before using the sensors for long-term logging.
 
-Grid power is exposed as a shared reading. CT channel power/current and the mode code are optional diagnostic candidates; the charger-load CT power/current and Stop/Fast mode codes have been correlated on this firmware. The meaning of other CT channels, the `0x7979` record, voltage phase assignments, checksums, and version differences remain under investigation. Charger control commands are not decoded.
+Grid power is exposed as a shared reading. CT channel power/current, the mode code, and plugged-in state are optional diagnostic candidates; the charger-load CT power/current, Stop/Fast mode codes, and one plug/unplug transition have been correlated on this firmware. The plug-state bit needs confirmation with more cycles and devices. The meaning of other CT channels, the `0x7979` record, voltage phase assignments, checksums, and version differences remain under investigation. Charger control commands are not decoded.
 
 Do not commit packet captures or installation-specific serial numbers, MAC addresses, IP addresses, or timestamps. Captures can contain those details even when the decoded fields do not.

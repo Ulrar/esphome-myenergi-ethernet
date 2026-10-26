@@ -182,6 +182,12 @@ void MyEnergiEthernetComponent::handle_record_(const uint8_t *record, size_t len
     device->mode_code_candidate->publish_state(static_cast<float>(record[23] & 0x03));
   }
 
+  // Bit 0 at record offset 12 tracked one plug/unplug cycle on this firmware;
+  // keep it named as a candidate until it has been confirmed on more devices.
+  if (device->plugged_in_candidate != nullptr) {
+    device->plugged_in_candidate->publish_state((record[12] & 0x01) != 0);
+  }
+
   // These short CT subrecords carry a channel number plus two signed values.
   // Value A correlates with watts. Value B on the charging-load channel
   // correlates with current in hundredths of an amp; retain candidate naming
@@ -262,6 +268,11 @@ void MyEnergiEthernetComponent::set_grid_frequency_candidate_sensor(uint32_t ser
 
 void MyEnergiEthernetComponent::set_mode_code_candidate_sensor(uint32_t serial, sensor::Sensor *sensor) {
   this->get_or_create_device_(serial).mode_code_candidate = sensor;
+}
+
+void MyEnergiEthernetComponent::set_plugged_in_candidate_binary_sensor(
+    uint32_t serial, binary_sensor::BinarySensor *sensor) {
+  this->get_or_create_device_(serial).plugged_in_candidate = sensor;
 }
 
 void MyEnergiEthernetComponent::set_ct_channel_power_sensor(uint32_t serial, uint8_t channel,
