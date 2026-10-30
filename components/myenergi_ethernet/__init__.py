@@ -29,26 +29,26 @@ CONF_GRID_POWER = "grid_power"
 CONF_CHARGING_POWER = "charging_power"
 CONF_SESSION_ENERGY = "session_energy"
 CONF_PWM = "pwm"
-CONF_VOLTAGE_1 = "voltage_candidate_1"
+CONF_GRID_VOLTAGE = "grid_voltage"
 CONF_VOLTAGE_2 = "voltage_candidate_2"
 CONF_VOLTAGE_3 = "voltage_candidate_3"
-CONF_GRID_FREQUENCY = "grid_frequency_candidate"
-CONF_MODE_CODE = "mode_code_candidate"
+CONF_GRID_FREQUENCY = "grid_frequency"
+CONF_MODE_CODE = "mode_code"
 CONF_PLUGGED_IN = "plugged_in_candidate"
 CONF_CT_CHANNELS = "ct_channels"
 CONF_CHANNEL = "channel"
-CONF_CT_POWER = "power_candidate"
-CONF_CT_CURRENT = "current_candidate"
+CONF_CT_POWER = "power"
+CONF_CT_CURRENT = "current"
 
 SENSOR_NAME_SUFFIXES = {
     CONF_CHARGING_POWER: "charging power",
     CONF_SESSION_ENERGY: "session energy",
     CONF_PWM: "PWM",
-    CONF_VOLTAGE_1: "voltage candidate 1",
+    CONF_GRID_VOLTAGE: "grid voltage",
     CONF_VOLTAGE_2: "voltage candidate 2",
     CONF_VOLTAGE_3: "voltage candidate 3",
-    CONF_GRID_FREQUENCY: "grid frequency candidate",
-    CONF_MODE_CODE: "mode code candidate",
+    CONF_GRID_FREQUENCY: "grid frequency",
+    CONF_MODE_CODE: "mode code",
 }
 
 BINARY_SENSOR_NAME_SUFFIXES = {
@@ -80,8 +80,8 @@ def _assign_sensor_names(config):
         ct_config = dict(ct_config)
         channel = ct_config[CONF_CHANNEL]
         for key, suffix in (
-            (CONF_CT_POWER, f"CT channel {channel} power candidate"),
-            (CONF_CT_CURRENT, f"CT channel {channel} current candidate"),
+            (CONF_CT_POWER, f"CT channel {channel} power"),
+            (CONF_CT_CURRENT, f"CT channel {channel} current"),
         ):
             sensor_config = ct_config.get(key)
             if isinstance(sensor_config, dict) and CONF_NAME not in sensor_config:
@@ -138,7 +138,7 @@ device_schema = cv.All(
                 accuracy_decimals=2,
                 state_class=STATE_CLASS_MEASUREMENT,
             ),
-            cv.Optional(CONF_VOLTAGE_1): _candidate_sensor_schema(
+            cv.Optional(CONF_GRID_VOLTAGE): sensor.sensor_schema(
                 unit_of_measurement="V",
                 icon="mdi:current-ac",
                 accuracy_decimals=1,
@@ -162,13 +162,13 @@ device_schema = cv.All(
                 state_class=STATE_CLASS_MEASUREMENT,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
             ),
-            cv.Optional(CONF_GRID_FREQUENCY): _candidate_sensor_schema(
+            cv.Optional(CONF_GRID_FREQUENCY): sensor.sensor_schema(
                 unit_of_measurement="Hz",
                 icon="mdi:sine-wave",
                 accuracy_decimals=2,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
             ),
-            cv.Optional(CONF_MODE_CODE): _candidate_sensor_schema(
+            cv.Optional(CONF_MODE_CODE): sensor.sensor_schema(
                 icon="mdi:ev-station",
                 accuracy_decimals=0,
                 entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
@@ -182,7 +182,7 @@ device_schema = cv.All(
                 cv.Schema(
                     {
                         cv.Required(CONF_CHANNEL): cv.int_range(min=1, max=15),
-                        cv.Optional(CONF_CT_POWER): _candidate_sensor_schema(
+                        cv.Optional(CONF_CT_POWER): sensor.sensor_schema(
                             unit_of_measurement="W",
                             icon="mdi:flash",
                             accuracy_decimals=0,
@@ -190,7 +190,7 @@ device_schema = cv.All(
                             state_class=STATE_CLASS_MEASUREMENT,
                             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
                         ),
-                        cv.Optional(CONF_CT_CURRENT): _candidate_sensor_schema(
+                        cv.Optional(CONF_CT_CURRENT): sensor.sensor_schema(
                             unit_of_measurement="A",
                             icon="mdi:current-ac",
                             accuracy_decimals=2,
@@ -236,11 +236,11 @@ async def to_code(config):
             (CONF_CHARGING_POWER, "set_charging_power_sensor"),
             (CONF_SESSION_ENERGY, "set_session_energy_sensor"),
             (CONF_PWM, "set_pwm_sensor"),
-            (CONF_VOLTAGE_1, "set_voltage_candidate_1_sensor"),
+            (CONF_GRID_VOLTAGE, "set_grid_voltage_sensor"),
             (CONF_VOLTAGE_2, "set_voltage_candidate_2_sensor"),
             (CONF_VOLTAGE_3, "set_voltage_candidate_3_sensor"),
-            (CONF_GRID_FREQUENCY, "set_grid_frequency_candidate_sensor"),
-            (CONF_MODE_CODE, "set_mode_code_candidate_sensor"),
+            (CONF_GRID_FREQUENCY, "set_grid_frequency_sensor"),
+            (CONF_MODE_CODE, "set_mode_code_sensor"),
         ):
             if key in device:
                 entity = await sensor.new_sensor(device[key])

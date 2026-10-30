@@ -134,8 +134,8 @@ void MyEnergiEthernetComponent::handle_record_(const uint8_t *record, size_t len
   }
 
   if (record_type == 0x5A5A) {
-    // Voltage/frequency channels remain candidates until their phase mapping
-    // has been confirmed for this firmware family.
+    // Grid voltage and frequency were confirmed on a single-phase
+    // installation. Other voltage channels remain candidates.
     if (length < 62) {
       return;
     }
@@ -144,8 +144,8 @@ void MyEnergiEthernetComponent::handle_record_(const uint8_t *record, size_t len
     if (device == nullptr) {
       return;
     }
-    if (device->voltage_candidate_1 != nullptr) {
-      device->voltage_candidate_1->publish_state(static_cast<float>(read_u16_le(record + 36)) / 10.0f);
+    if (device->grid_voltage != nullptr) {
+      device->grid_voltage->publish_state(static_cast<float>(read_u16_le(record + 36)) / 10.0f);
     }
     if (device->voltage_candidate_2 != nullptr) {
       device->voltage_candidate_2->publish_state(static_cast<float>(read_u16_le(record + 38)) / 10.0f);
@@ -153,8 +153,8 @@ void MyEnergiEthernetComponent::handle_record_(const uint8_t *record, size_t len
     if (device->voltage_candidate_3 != nullptr) {
       device->voltage_candidate_3->publish_state(static_cast<float>(read_u16_le(record + 40)) / 10.0f);
     }
-    if (device->grid_frequency_candidate != nullptr) {
-      device->grid_frequency_candidate->publish_state(static_cast<float>(read_u16_le(record + 42)) / 100.0f);
+    if (device->grid_frequency != nullptr) {
+      device->grid_frequency->publish_state(static_cast<float>(read_u16_le(record + 42)) / 100.0f);
     }
     return;
   }
@@ -178,8 +178,8 @@ void MyEnergiEthernetComponent::handle_record_(const uint8_t *record, size_t len
     device->pwm->publish_state(static_cast<float>(read_u16_le(record + 28)) / 100.0f);
   }
 
-  if (device->mode_code_candidate != nullptr) {
-    device->mode_code_candidate->publish_state(static_cast<float>(record[23] & 0x03));
+  if (device->mode_code != nullptr) {
+    device->mode_code->publish_state(static_cast<float>(record[23] & 0x03));
   }
 
   // Bit 0 at record offset 12 tracked one plug/unplug cycle on this firmware;
@@ -189,9 +189,8 @@ void MyEnergiEthernetComponent::handle_record_(const uint8_t *record, size_t len
   }
 
   // These short CT subrecords carry a channel number plus two signed values.
-  // Value A correlates with watts. Value B on the charging-load channel
-  // correlates with current in hundredths of an amp; retain candidate naming
-  // because the scale and role have not been checked across other CT roles.
+  // Value A is watts. Value B on the charger-load channel is current in
+  // hundredths of an amp. Other CT channel roles have not been checked yet.
   size_t offset = 24;
   while (offset < length) {
     const uint8_t subrecord_length = record[offset] & 0x0F;
@@ -250,8 +249,8 @@ void MyEnergiEthernetComponent::set_pwm_sensor(uint32_t serial, sensor::Sensor *
   this->get_or_create_device_(serial).pwm = sensor;
 }
 
-void MyEnergiEthernetComponent::set_voltage_candidate_1_sensor(uint32_t serial, sensor::Sensor *sensor) {
-  this->get_or_create_device_(serial).voltage_candidate_1 = sensor;
+void MyEnergiEthernetComponent::set_grid_voltage_sensor(uint32_t serial, sensor::Sensor *sensor) {
+  this->get_or_create_device_(serial).grid_voltage = sensor;
 }
 
 void MyEnergiEthernetComponent::set_voltage_candidate_2_sensor(uint32_t serial, sensor::Sensor *sensor) {
@@ -262,12 +261,12 @@ void MyEnergiEthernetComponent::set_voltage_candidate_3_sensor(uint32_t serial, 
   this->get_or_create_device_(serial).voltage_candidate_3 = sensor;
 }
 
-void MyEnergiEthernetComponent::set_grid_frequency_candidate_sensor(uint32_t serial, sensor::Sensor *sensor) {
-  this->get_or_create_device_(serial).grid_frequency_candidate = sensor;
+void MyEnergiEthernetComponent::set_grid_frequency_sensor(uint32_t serial, sensor::Sensor *sensor) {
+  this->get_or_create_device_(serial).grid_frequency = sensor;
 }
 
-void MyEnergiEthernetComponent::set_mode_code_candidate_sensor(uint32_t serial, sensor::Sensor *sensor) {
-  this->get_or_create_device_(serial).mode_code_candidate = sensor;
+void MyEnergiEthernetComponent::set_mode_code_sensor(uint32_t serial, sensor::Sensor *sensor) {
+  this->get_or_create_device_(serial).mode_code = sensor;
 }
 
 void MyEnergiEthernetComponent::set_plugged_in_candidate_binary_sensor(
